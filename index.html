@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>互動式測驗系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen relative">
+
+    <div id="customModal" class="fixed inset-0 bg-black/60 z-[100] hidden flex-col items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all">
+            <h3 id="modalTitle" class="text-2xl font-bold mb-3 text-slate-800">提示</h3>
+            <p id="modalMessage" class="text-slate-600 mb-6 text-base whitespace-pre-wrap"></p>
+            <div id="modalButtons" class="flex justify-center space-x-3">
+                <!-- 按鈕由 JS 動態生成 -->
+            </div>
+        </div>
+    </div>
+
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/70 z-50 hidden flex-col items-center justify-center backdrop-blur-sm">
+        <div class="loader mb-4"></div>
+        <p class="text-white text-lg font-semibold tracking-wider">成績傳送與試卷批改中...</p>
+        <p class="text-blue-200 mt-2 text-sm">約需 5-10 秒，請稍候</p>
+    </div>
+
+    <header class="bg-blue-600 text-white p-4 shadow-md text-center">
+        <h1 class="text-2xl font-bold">自然科 - 閃亮的天空 單元測驗</h1>
+    </header>
+
+    <main class="max-w-3xl mx-auto p-4 md:p-8">
+        
+        <div id="loginView" class="bg-white rounded-xl shadow-lg p-6 md:p-10 mb-8 border border-slate-100">
+            <h2 class="text-xl font-bold mb-6 text-slate-700">請填寫基本資料</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">班級</label>
+                    <select id="studentClass" class="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white">
+                        <option value="">請選擇班級</option>
+                        <option value="403">403</option>
+                        <option value="404">404</option>
+                        <option value="405">405</option>
+                        <option value="406">406</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">座號</label>
+                    <input type="number" id="studentNumber" min="1" max="50" placeholder="例如: 15" class="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">姓名</label>
+                    <input type="text" id="studentName" placeholder="請輸入姓名" class="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                </div>
+                <button onclick="startQuiz()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors mt-4">
+                    開始測驗
+                </button>
+            </div>
+        </div>
+
+        <div id="quizView" class="hidden">
+            <div class="flex justify-between items-center mb-4 bg-white p-4 rounded-lg shadow-sm border border-slate-100">
+                <span id="studentInfoDisplay" class="font-semibold text-slate-600"></span>
+                <span class="font-bold text-blue-600">總配分: 100 分</span>
+            </div>
+            
+            <div id="questionsContainer" class="space-y-6">
+                <!-- 題目將由 JS 動態生成 -->
+            </div>
+
+            <div class="mt-8 mb-12">
+                <!-- 注意：這裡改為觸發 trySubmitQuiz -->
+                <button onclick="trySubmitQuiz()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-4 rounded-xl shadow-lg transition-colors text-lg">
+                    提交試卷
+                </button>
+            </div>
+        </div>
+
+        <div id="resultView" class="hidden bg-white rounded-xl shadow-lg p-6 md:p-10 text-center border border-slate-100">
+            <div class="text-5xl mb-4">🎉</div>
+            <h2 class="text-3xl font-bold text-slate-800 mb-2">測驗完成！</h2>
+            <p class="text-lg text-slate-600 mb-6">你的總得分為： <span id="finalScoreDisplay" class="text-3xl font-extrabold text-blue-600"></span> 分</p>
+            <div class="bg-blue-50 text-blue-800 p-4 rounded-lg mb-6 text-sm">
+                系統已處理完畢！請靜待老師通知，或準備下一階段的課程。
+            </div>
+            <button onclick="location.reload()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-6 rounded-lg transition-colors">
+                返回首頁
+            </button>
+        </div>
+
+    </main>
+
+    <script>
+        // 這是您目前最新提供的 GAS URL
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzbuyKv8IC_rIdsEU172UQXsX4pr-lnt7dRq5VpZ0luHma8qVpTPdG-fm10mZQv811Z/exec"; 
+
+        // 擴充題庫 (包含各種題型，總分 166 分)
+        const questionBank = [
+            { id: 1, type: '是非題', points: 4, concept: 'moon_daytime', question: '小華早上出門上學時，抬頭看見天空中除了太陽，還有一彎淡淡的月亮。這是不可能的，因為白天絕對看不見月亮。', options: ['O', 'X'], answer: 'X', explanation: '白天也有可能看見月亮。' },
+            { id: 2, type: '是非題', points: 4, concept: 'earth_rotation', question: '露營時，小明發現星星和月亮都是從東方升起、西方落下，他告訴同學這是因為地球自轉造成的現象。', options: ['O', 'X'], answer: 'O', explanation: '天體東升西落是因為地球由西向東自轉。' },
+            { id: 3, type: '是非題', points: 4, concept: 'height_distance_mountain', question: '小美想測量遠方高山和操場旗竿的高度角。當她往前走 10 步後，旗竿的高度角數值會有明顯改變，但高山的高度角幾乎不會變。', options: ['O', 'X'], answer: 'O', explanation: '觀測物距離較近時，高度角隨位置改變較明顯；距離遠的觀測物，高度角變化不明顯。' },
+            { id: 4, type: '是非題', points: 4, concept: 'fist_method', question: '用「拳頭計數法」測量月亮高度角時，手臂要伸直並與眼睛一樣高作為第0個拳頭，這種方法比「高度角觀測器」還要精確。', options: ['O', 'X'], answer: 'X', explanation: '高度角觀測器有刻度和棉線，比拳頭計數法更精確，誤差較小。' },
+            { id: 5, type: '是非題', points: 4, concept: 'observe_elements_3', question: '觀察月亮時，只要紀錄「日期、時間、地點」這三個要素就足夠完整了。', options: ['O', 'X'], answer: 'X', explanation: '觀測月亮的要素包含：觀測日期、時間、地點、參考景物、方位、高度角。' },
+            { id: 6, type: '是非題', points: 4, concept: 'full_moon', question: '中秋節晚上，全家一起賞月，這時天空中出現的月相是「望月（滿月）」。', options: ['O', 'X'], answer: 'O', explanation: '農曆十五或十六的月相為望月（滿月）。' },
+            { id: 7, type: '是非題', points: 4, concept: 'noon_shadow', question: '中午時太陽高度角最大，影子會最長。', options: ['O', 'X'], answer: 'X', explanation: '中午時太陽高度角最大，影子最短。' },
+            { id: 8, type: '是非題', points: 4, concept: 'moon_cycle', question: '月相的變化是有規律的，從新月到滿月，再到下一個新月，大約需要 29 到 30 天。', options: ['O', 'X'], answer: 'O', explanation: '月相變化週期約為 29~30 天。' },
+            { id: 9, type: '是非題', points: 4, concept: 'last_quarter', question: '阿星在農曆 22 日清晨起床運動，他看到的月亮應該是右半邊（西方）發亮的「上弦月」。', options: ['O', 'X'], answer: 'X', explanation: '農曆 22 或 23 日清晨出現的是下弦月，左半邊（東方）發亮。' },
+            { id: 10, type: '是非題', points: 4, concept: 'instrument_usage', question: '晚上使用高度角觀測器測量月亮時，壓住棉線後，棉線對準的度數就是月亮的高度角。', options: ['O', 'X'], answer: 'O', explanation: '這是正確的操作方式。' },
+            
+            { id: 11, type: '選擇題', points: 5, concept: 'shadow_direction', question: '下午三點，體育課時小智站在操場中央，他發現自己的影子朝向東方。請問這時太陽大約在哪個方位？', options: ['東方', '西方', '南方', '北方'], answer: '西方', explanation: '太陽位置和物體影子方位相反。' },
+            { id: 12, type: '選擇題', points: 5, concept: 'shadow_length_change', question: '承上題，如果小智從下午三點一直站在原地到傍晚五點，他的影子長度會發生什麼變化？', options: ['越來越短', '越來越長', '保持不變', '先變短再變長'], answer: '越來越長', explanation: '下午太陽高度角越來越小，影子會越來越長。' },
+            { id: 13, type: '選擇題', points: 5, concept: 'moon_path', question: '關於一天中月亮在天空的位置變化，下列哪一個描述是正確的？', options: ['由西向東，高度角小變大再變小', '由東向西，高度角大變小再變大', '由東向西，高度角小變大再變小', '整晚固定不移動'], answer: '由東向西，高度角小變大再變小', explanation: '天體東升西落，高度角呈弧形變化。' },
+            { id: 14, type: '選擇題', points: 5, concept: 'height_distance_tower', question: '小安量測遠方山頂電塔是 30 度。如果想要量出「更大」的角度，她應該怎麼做？', options: ['遠離電塔走50步', '靠近電塔走50步', '換拳頭計數法', '閉上一隻眼睛'], answer: '靠近電塔走50步', explanation: '距離越近，高度角越大。' },
+            { id: 15, type: '選擇題', points: 5, concept: 'waning_crescent', question: '清晨看到只有「左半邊（東方）」一小部分亮，像眉毛的月亮，農曆日期最可能是？', options: ['農曆 1 日', '農曆 7 日', '農曆 15 日', '農曆 27 日'], answer: '農曆 27 日', explanation: '農曆 27 日的殘月，清晨出現。' },
+            { id: 16, type: '選擇題', points: 5, concept: 'observe_elements_6', question: '觀察月亮的六大要素中，不包含下列哪一項？', options: ['參考景物', '氣溫', '方位', '高度角'], answer: '氣溫', explanation: '觀測要素包含：日期、時間、地點、參考景物、方位、高度角。' },
+            { id: 17, type: '選擇題', points: 5, concept: 'new_moon_choice', question: '下列哪一個農曆日期，在地球上是「看不見月亮」的？', options: ['農曆 1 日', '農曆 8 日', '農曆 15 日', '農曆 22 日'], answer: '農曆 1 日', explanation: '農曆 1 日為朔月（新月）。' },
+            { id: 18, type: '選擇題', points: 5, concept: 'phase_change_1_15', question: '從農曆初一到農曆十五，月相的變化趨勢是？', options: ['每天都一樣圓', '由圓慢慢變缺', '由缺慢慢變圓', '沒有規律'], answer: '由缺慢慢變圓', explanation: '上半個月月亮受光面積變大。' },
+            { id: 19, type: '選擇題', points: 5, concept: 'noon_shadow_choice', question: '中午 12 點時，太陽的高度角通常是一天最大的。這時候物體的影子長度會如何？', options: ['最短', '最長', '一樣長', '消失不見'], answer: '最短', explanation: '高度角越大，影子越短。' },
+            { id: 20, type: '選擇題', points: 5, concept: 'last_quarter_choice', question: '下弦月出現在農曆 22 或 23 日。請問下弦月是亮哪一邊？', options: ['上半邊', '下半邊', '右邊（西方）', '左邊（東方）'], answer: '左邊（東方）', explanation: '下弦月亮左半邊。' },
+
+            { id: 21, type: '填空題', points: 4, concept: 'east_west', question: '天空中不管是太陽、月亮還是星星，移動的方式都是由[blank]方升起、由[blank]方落下。', answer: ['東', '西'], explanation: '地球自轉造成東升西落。' },
+            { id: 22, type: '填空題', points: 4, concept: 'instrument_compare', question: '使用[blank]法測量高度角誤差較大；而使用[blank]則精確度較高。', answer: ['拳頭', '高度角觀測器'], explanation: '拳頭計數法誤差大，觀測器精確度高。' },
+            { id: 23, type: '填空題', points: 4, concept: 'phase_change_1_15_blank', question: '農曆 1 到 15 日，月相會由[blank]慢慢變[blank]。', answer: ['缺', '圓'], explanation: '農曆上半個月由缺變圓。' },
+            { id: 24, type: '填空題', points: 4, concept: 'phase_change_15_30_blank', question: '農曆 15 到 30 日，月相會由[blank]慢慢變[blank]。', answer: ['圓', '缺'], explanation: '農曆下半個月由圓變缺。' },
+
+            { id: 25, type: '配合題', points: 6, concept: 'full_moon_match', question: '月相最圓滿，稱為滿月或望月，大約是農曆哪一天？', options: ['農曆 1 日', '農曆 7、8 日', '農曆 15 日', '農曆 22、23 日', '農曆 27 日'], answer: '農曆 15 日', explanation: '滿月出現在農曆 15 或 16 日。' },
+            { id: 26, type: '配合題', points: 6, concept: 'first_quarter_match', question: '亮右半邊（西方），稱為上弦月，大約是農曆哪一天？', options: ['農曆 1 日', '農曆 7、8 日', '農曆 15 日', '農曆 22、23 日', '農曆 27 日'], answer: '農曆 7、8 日', explanation: '上弦月出現在農曆 7 或 8 日。' },
+            { id: 27, type: '配合題', points: 6, concept: 'new_moon_match', question: '幾乎看不見，稱為朔月或新月，大約是農曆哪一天？', options: ['農曆 1 日', '農曆 7、8 日', '農曆 15 日', '農曆 22、23 日', '農曆 27 日'], answer: '農曆 1 日', explanation: '朔月出現在農曆 1 日。' },
+            { id: 28, type: '配合題', points: 6, concept: 'last_quarter_match', question: '亮左半邊（東方），稱為下弦月，大約是農曆哪一天？', options: ['農曆 1 日', '農曆 7、8 日', '農曆 15 日', '農曆 22、23 日', '農曆 27 日'], answer: '農曆 22、23 日', explanation: '下弦月出現在農曆 22 或 23 日。' },
+            { id: 29, type: '配合題', points: 6, concept: 'waning_crescent_match', question: '清晨出現，只亮左邊一點點，彎彎像眉毛的殘月，大約是農曆哪一天？', options: ['農曆 1 日', '農曆 7、8 日', '農曆 15 日', '農曆 22、23 日', '農曆 27 日'], answer: '農曆 27 日', explanation: '農曆 27 日為殘月。' },
+
+            { id: 30, type: '問答題', points: 10, concept: 'full_moon_qa', question: '阿凱希望能看到又大又圓的月亮，他應該建議家人把露營日期訂在農曆的哪一天？', answer: ['十五', '15', '十六', '16'], explanation: '農曆十五是滿月。' },
+            { id: 31, type: '問答題', points: 10, concept: 'new_moon_qa', question: '如果希望晚上天空越暗越好（不想被月光影響），應該將日期訂在農曆初幾？', answer: ['初一', '一', '1', '朔月', '新月'], explanation: '農曆初一是朔月，沒有月光。' },
+            { id: 32, type: '問答題', points: 10, concept: 'shadow_direction_qa', question: '下午4點天空出大太陽。請問小智現在的「影子」會朝向哪一個方位？', answer: ['東'], explanation: '下午太陽在西，影子朝東。' }
+        ];
+
+        let currentQuiz = [];
+        let studentData = {};
+
+        function showModal(title, message, type = 'alert', onConfirm = null) {
+            const modal = document.getElementById('customModal');
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalMessage').innerText = message;
+            
+            const btnContainer = document.getElementById('modalButtons');
+            btnContainer.innerHTML = '';
+            
+            if (type === 'confirm') {
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'px-5 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-bold transition-colors';
+                cancelBtn.innerText = '取消';
+                cancelBtn.onclick = () => modal.classList.add('hidden');
+                
+                const okBtn = document.createElement('button');
+                okBtn.className = 'px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold transition-colors';
+                okBtn.innerText = '確定';
+                okBtn.onclick = () => {
+                    modal.classList.add('hidden');
+                    if (onConfirm) onConfirm();
+                };
+                
+                btnContainer.appendChild(cancelBtn);
+                btnContainer.appendChild(okBtn);
+            } else {
+                const okBtn = document.createElement('button');
+                okBtn.className = 'px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold transition-colors w-full';
+                okBtn.innerText = '我知道了';
+                okBtn.onclick = () => {
+                    modal.classList.add('hidden');
+                    if (onConfirm) onConfirm();
+                };
+                btnContainer.appendChild(okBtn);
+            }
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function startQuiz() {
+            const cls = document.getElementById('studentClass').value;
+            const num = document.getElementById('studentNumber').value;
+            const name = document.getElementById('studentName').value;
+
+            if (!cls || !num || !name) {
+                showModal('資料不完整', '請完整填寫班級、座號與姓名！');
+                return;
+            }
+
+            studentData = { class: cls, number: String(num).padStart(2, '0'), name: name };
+            currentQuiz = generate100PointsQuiz(questionBank);
+            
+            document.getElementById('loginView').classList.add('hidden');
+            document.getElementById('quizView').classList.remove('hidden');
+            document.getElementById('studentInfoDisplay').innerText = `${studentData.class}班 ${studentData.number}號 ${studentData.name}`;
+
+            renderQuiz();
+        }
+
+        function generate100PointsQuiz(bank) {
+            const types = [...new Set(bank.map(q => q.type))];
+            let bestSubset = [];
+            let found = false;
+            let shuffledBank = [...bank].sort(() => 0.5 - Math.random());
+
+            function dfs(index, currentPoints, currentSubset, usedConcepts) {
+                if (found) return;
+                if (currentPoints === 100) {
+                    let currentTypes = new Set(currentSubset.map(q => q.type));
+                    if (currentTypes.size === types.length) {
+                        bestSubset = [...currentSubset];
+                        found = true;
+                    }
+                    return;
+                }
+                if (currentPoints > 100 || index >= shuffledBank.length) return;
+
+                let q = shuffledBank[index];
+                if (!usedConcepts.has(q.concept)) {
+                    usedConcepts.add(q.concept);
+                    currentSubset.push(q);
+                    dfs(index + 1, currentPoints + q.points, currentSubset, usedConcepts);
+                    currentSubset.pop();
+                    usedConcepts.delete(q.concept);
+                }
+                dfs(index + 1, currentPoints, currentSubset, usedConcepts);
+            }
+
+            dfs(0, 0, [], new Set());
+            return bestSubset.sort(() => 0.5 - Math.random());
+        }
+
+        function renderQuiz() {
+            const container = document.getElementById('questionsContainer');
+            container.innerHTML = '';
+
+            currentQuiz.forEach((q, index) => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-5 md:p-6 rounded-xl shadow-md border border-slate-100";
+                
+                let innerHTML = `
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-lg font-bold text-slate-800"><span class="text-blue-600 mr-1">${index + 1}.</span> [${q.type}] </h3>
+                        <span class="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded ml-2 whitespace-nowrap">${q.points} 分</span>
+                    </div>
+                `;
+
+                if (q.type === '是非題' || q.type === '選擇題') {
+                    innerHTML += `<h3 class="text-lg font-bold text-slate-800 mb-4">${q.question}</h3><div class="mt-4 flex flex-col space-y-1">`;
+                    q.options.forEach((opt, oIdx) => {
+                        const optId = `q_${q.id}_opt_${oIdx}`;
+                        innerHTML += `
+                            <label for="${optId}" class="flex items-center p-3 mt-2 border rounded-lg cursor-pointer hover:bg-blue-50 transition-colors">
+                                <input type="radio" name="q_${q.id}" id="${optId}" value="${opt}" class="w-5 h-5 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                                <span class="ml-3 text-slate-700">${opt}</span>
+                            </label>
+                        `;
+                    });
+                    innerHTML += `</div>`;
+                } 
+                else if (q.type === '填空題') {
+                    let parts = q.question.split('[blank]');
+                    innerHTML += `<div class="flex items-center flex-wrap leading-loose text-lg font-bold text-slate-800 mt-2">`;
+                    parts.forEach((part, i) => {
+                        innerHTML += `<span>${part}</span>`;
+                        if (i < parts.length - 1) {
+                            innerHTML += `<input type="text" id="q_${q.id}_blank_${i}" class="mx-2 w-20 border-b-2 border-slate-400 focus:border-blue-500 outline-none text-center text-blue-700 font-bold bg-slate-50 rounded" placeholder="填寫">`;
+                        }
+                    });
+                    innerHTML += `</div>`;
+                }
+                else if (q.type === '配合題') {
+                    innerHTML += `<h3 class="text-lg font-bold text-slate-800 mb-4">${q.question}</h3>`;
+                    innerHTML += `<div class="mt-2"><select id="q_${q.id}_select" class="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"><option value="">請點選此處，選擇正確配對...</option>`;
+                    q.options.forEach(opt => {
+                        innerHTML += `<option value="${opt}">${opt}</option>`;
+                    });
+                    innerHTML += `</select></div>`;
+                }
+                else if (q.type === '問答題') {
+                    innerHTML += `<h3 class="text-lg font-bold text-slate-800 mb-4">${q.question}</h3>`;
+                    innerHTML += `<div class="mt-2"><textarea id="q_${q.id}_text" rows="2" class="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="請在此輸入你的答案..."></textarea></div>`;
+                }
+
+                card.innerHTML = innerHTML;
+                container.appendChild(card);
+            });
+        }
+
+        function showResultScreen(score) {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+            document.getElementById('loadingOverlay').classList.remove('flex');
+            document.getElementById('quizView').classList.add('hidden');
+            document.getElementById('resultView').classList.remove('hidden');
+            document.getElementById('finalScoreDisplay').innerText = score;
+        }
+
+        // 按下提交按鈕第一步：確認視窗
+        function trySubmitQuiz() {
+            showModal('確認交卷', '確定要提交試卷嗎？提交後無法修改喔！', 'confirm', () => {
+                processSubmission();
+            });
+        }
+
+        // 第二步：批改算分
+        function processSubmission() {
+            let score = 0;
+            let details = [];
+            let unAnswered = false;
+
+            currentQuiz.forEach(q => {
+                let userAns = '';
+                let isCorrect = false;
+                let correctAnsDisplay = '';
+
+                try {
+                    if (q.type === '是非題' || q.type === '選擇題') {
+                        const checked = document.querySelector(`input[name="q_${q.id}"]:checked`);
+                        userAns = checked ? checked.value : '';
+                        isCorrect = (userAns === q.answer);
+                        correctAnsDisplay = q.answer;
+                    } 
+                    else if (q.type === '填空題') {
+                        let answers = [];
+                        let allCorrect = true;
+                        let missingAny = false;
+                        for (let i = 0; i < q.answer.length; i++) {
+                            const inputElem = document.getElementById(`q_${q.id}_blank_${i}`);
+                            const val = inputElem ? inputElem.value.trim() : '';
+                            answers.push(val);
+                            if (val === '') missingAny = true;
+                            if (!val.includes(q.answer[i])) allCorrect = false;
+                        }
+                        userAns = answers.join(', ');
+                        if (missingAny) userAns = ''; // 若有漏填，視為未完整作答
+                        isCorrect = allCorrect;
+                        correctAnsDisplay = q.answer.join(', ');
+                    }
+                    else if (q.type === '配合題') {
+                        const selectElem = document.getElementById(`q_${q.id}_select`);
+                        userAns = selectElem ? selectElem.value : '';
+                        isCorrect = (userAns === q.answer);
+                        correctAnsDisplay = q.answer;
+                    }
+                    else if (q.type === '問答題') {
+                        const txtElem = document.getElementById(`q_${q.id}_text`);
+                        userAns = txtElem ? txtElem.value.trim() : '';
+                        isCorrect = q.answer.some(kw => userAns.includes(kw));
+                        correctAnsDisplay = q.answer[0];
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+
+                if (userAns === '') unAnswered = true;
+                if (isCorrect) score += q.points;
+
+                details.push({
+                    type: q.type,
+                    question: q.question.replace(/\[blank\]/g, '____'),
+                    points: q.points,
+                    user_ans: userAns,
+                    correct_ans: correctAnsDisplay,
+                    is_correct: isCorrect,
+                    explanation: q.explanation
+                });
+            });
+
+            const payload = { student: studentData, score: score, details: details };
+
+            if (unAnswered) {
+                showModal('未作答提醒', '還有題目未作答，確定要強制作答並交卷嗎？未作答將不予計分。', 'confirm', () => {
+                    executeFetchPayload(payload, score);
+                });
+            } else {
+                executeFetchPayload(payload, score);
+            }
+        }
+
+        async function executeFetchPayload(payload, score) {
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+            document.getElementById('loadingOverlay').classList.add('flex');
+
+            try {
+                const response = await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    redirect: "follow",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success' || result.status === 'partial_success') {
+                    if (result.status === 'partial_success') {
+                        console.warn(result.message);
+                    }
+                    showResultScreen(score);
+                } else {
+                    showModal('後端錯誤', '後端錯誤提示：\n' + result.message + '\n\n系統已啟動保護機制，為您直接顯示成績！', 'alert', () => {
+                        showResultScreen(score);
+                    });
+                }
+            } catch (error) {
+                console.error('Fetch Error:', error);
+                showModal('連線失敗', '網路連線失敗或 GAS 網址失效。\n\n系統已啟動保護機制，為您直接顯示成績！', 'alert', () => {
+                    showResultScreen(score);
+                });
+            }
+        }
+    </script>
+</body>
+</html>
